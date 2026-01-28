@@ -18,6 +18,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <plugin-support.h>
+#include <stdio.h>
+#include <opencv2/opencv.hpp>
+
+using namespace cv;
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
@@ -25,6 +29,19 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 bool obs_module_load(void)
 {
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
+
+	Mat image;
+    image = imread("C:/Users/matth/Pictures/20260102_203159.jpg");
+    if ( !image.data )
+    {
+        printf("No image data \n");
+        return false;
+    }
+    namedWindow("Displayed Image", WINDOW_AUTOSIZE);
+    imshow("Display Image", image);
+    waitKey(0);
+    return true;
+
 	return true;
 }
 
@@ -32,3 +49,5 @@ void obs_module_unload(void)
 {
 	obs_log(LOG_INFO, "plugin unloaded");
 }
+
+

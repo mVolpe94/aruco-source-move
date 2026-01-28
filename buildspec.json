@@ -36,10 +36,10 @@
             "bundleId": "com.example.plugintemplate-for-obs"
         }
     },
-    "name": "plugintemplate-for-obs",
-    "displayName": "Plugin Template for OBS",
-    "version": "1.0.0",
-    "author": "Your Name Here",
-    "website": "https://example.com",
-    "email": "me@example.com"
+    "name": "aruco-source-move",
+    "displayName": "Aruco Source Move",
+    "version": "0.1.0",
+    "author": "Matthew Volpe",
+    "website": "https://github.com/mVolpe94",
+    "email": "69683445+mVolpe94@users.noreply.github.com"
 }
