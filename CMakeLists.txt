@@ -4,7 +4,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCO
 
 project(${_name} VERSION ${_version})
 
-option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" OFF)
+option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" ON)
 option(ENABLE_QT "Use Qt functionality" OFF)
 
 include(compilerconfig)
@@ -12,11 +12,12 @@ include(defaults)
 include(helpers)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
-
+target_compile_features(${CMAKE_PROJECT_NAME} PRIVATE cxx_std_20)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src ${OpenCV_INCLUDE_DIRS})
 find_package(libobs REQUIRED)
 find_package( OpenCV REQUIRED )
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs ${OpenCV_LIBS})
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs opencv_core opencv_imgproc opencv_aruco)
+
 
 
 if(ENABLE_FRONTEND_API)
