@@ -34,15 +34,6 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 const char *FILTER_NAME = "ArUco Source Move";
 
 
-template <typename T>
-void log_var(const char* name, const T& value)
-{
-    std::ostringstream oss;
-    oss << name << " = " << value;
-    blog(LOG_INFO, "%s", oss.str().c_str());
-}
-
-
 struct aruco_data {
     // self reference
     obs_source_t *source;
@@ -77,6 +68,56 @@ struct aruco_data {
     // scaling factor
     double scaling_factor;
 };
+
+
+//----Helper Functions----//
+
+
+template <typename T>
+void log_var(const char* name, const T& value)
+{
+    std::ostringstream oss;
+    oss << name << " = " << value;
+    blog(LOG_INFO, "%s", oss.str().c_str());
+}
+
+
+//Populates the Combo Box for selecting sources in the plugin menu
+static bool add_scene_item_to_list(obs_scene_t *scene, obs_sceneitem_t *item, void *data){
+    obs_property_t *list = (obs_property_t*)data;
+
+    obs_source_t* source = obs_sceneitem_get_source(item);
+
+    if (!source)
+        return true;
+    
+    if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER)
+        return true;
+
+    const char* uuid = obs_source_get_uuid(source);
+    const char* name = obs_source_get_name(source);
+
+    if (!uuid || !name)
+        return true;
+
+    obs_property_list_add_string(list, name, uuid);
+
+    return true;
+}
+
+
+//This function grabs the scene item from a specified source and adds it to the filter struct
+static bool find_scene_item(obs_scene_t *scene, obs_sceneitem_t *item, void *data)
+{
+    aruco_data *filter = (aruco_data *)data;
+    obs_source_t *src = obs_sceneitem_get_source(item);
+
+    if (src == filter->selected_source) {
+        filter->scene_item = item;
+        return false;
+    }
+    return true;
+}
 
 
 //Runs every OBS tick to move the source on the screen when ArUco marker is found
@@ -121,7 +162,44 @@ static void tick_callback(void *data, float seconds)
 }
 
 
-static void filter_update(void *data, obs_data_t *settings);
+//Populates the state with the selected source and fills in related data (height & width)
+static void resolve_selected_source(aruco_data *filter)
+{
+    if (filter->selected_source) {
+        obs_source_release(filter->selected_source);
+        filter->selected_source = nullptr;
+    }
+
+    obs_data_t *settings = obs_source_get_settings(filter->source);
+    const char *source_name = obs_data_get_string(settings, "source_name");
+
+    filter->selected_source = obs_get_source_by_uuid(source_name);
+
+    filter->source_h = obs_source_get_height(filter->selected_source);
+    filter->source_w = obs_source_get_width(filter->selected_source);
+
+    obs_data_release(settings);
+
+    return;
+}
+
+
+//Populates the sceneitem inside the state of the plugin
+static void resolve_selected_sceneitem(aruco_data *filter)
+{
+    obs_source_t *scene_source = obs_frontend_get_current_scene();
+    obs_scene_t *scene = obs_scene_from_source(scene_source);
+
+    if (scene && filter->selected_source) {
+        obs_scene_enum_items(scene, find_scene_item, filter);
+    }
+
+    obs_source_release(scene_source);
+    return;
+}
+
+
+//----OBS Specific Functions----//
 
 
 //Simply returns the filter name
@@ -129,20 +207,6 @@ const char *get_filter_name(void *unused)
 {
     UNUSED_PARAMETER(unused);
     return FILTER_NAME;
-}
-
-
-//This function grabs the scene item from a specified source and adds it to the filter struct
-static bool find_scene_item(obs_scene_t *scene, obs_sceneitem_t *item, void *data)
-{
-    aruco_data *filter = (aruco_data *)data;
-    obs_source_t *src = obs_sceneitem_get_source(item);
-
-    if (src == filter->selected_source) {
-        filter->scene_item = item;
-        return false;
-    }
-    return true;
 }
 
 
@@ -181,7 +245,7 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->mark_rotation = 0.0;
 
     obs_add_tick_callback(tick_callback, filter);
-    filter_update(filter, settings);
+    //filter_update(filter, settings);
     obs_source_update(source, settings);
 
     obs_source_release(scene_source);
@@ -294,27 +358,13 @@ static struct obs_source_frame *filter_video(void *data, struct obs_source_frame
 }
 
 
-
 static void filter_activate(void *data)
 {
     struct aruco_data *filter = (aruco_data *)data;
-    obs_data_t *settings = obs_source_get_settings(filter->source);
 
-    const char *source_name = obs_data_get_string(settings, "source_name");
+    resolve_selected_source(filter);
+    resolve_selected_sceneitem(filter);
 
-    obs_source_t *scene_source = obs_frontend_get_current_scene();
-    obs_scene_t *scene = obs_scene_from_source(scene_source);
-
-    filter->selected_source = obs_get_source_by_uuid(source_name);
-    filter->source_h = obs_source_get_height(filter->selected_source);
-    filter->source_w = obs_source_get_width(filter->selected_source);
-
-    if (scene && filter->selected_source) {
-        obs_scene_enum_items(scene, find_scene_item, filter);
-    }
-
-    obs_data_release(settings);
-    obs_source_release(scene_source);
 }
 
 
@@ -353,29 +403,6 @@ static void filter_update(void *data, obs_data_t *settings)
     filter->scaling_factor = scaling_factor;
 
     obs_source_release(scene_source);
-}
-
-
-static bool add_scene_item_to_list(obs_scene_t *scene, obs_sceneitem_t *item, void *data){
-    obs_property_t *list = (obs_property_t*)data;
-
-    obs_source_t* source = obs_sceneitem_get_source(item);
-
-    if (!source)
-        return true;
-    
-    if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER)
-        return true;
-
-    const char* uuid = obs_source_get_uuid(source);
-    const char* name = obs_source_get_name(source);
-
-    if (!uuid || !name)
-        return true;
-
-    obs_property_list_add_string(list, name, uuid);
-
-    return true;
 }
 
 
@@ -433,6 +460,7 @@ bool obs_module_load(void)
 
 	return true;
 }
+
 
 void obs_module_unload(void)
 {
