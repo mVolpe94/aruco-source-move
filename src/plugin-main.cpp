@@ -45,6 +45,7 @@ struct aruco_data {
     // settings
     int aruco_id;
     bool draw_marker;
+    bool show_only_when_marker;
 
     // aruco dict
     cv::Ptr<cv::aruco::Dictionary> dictionary;
@@ -126,11 +127,18 @@ static void tick_callback(void *data, float seconds)
     UNUSED_PARAMETER(seconds); 
     struct aruco_data *filter = (aruco_data *)data;
 
-    if (!filter->transform_dirty || !filter->marker_visible)
+    if (!filter->marker_visible && filter->show_only_when_marker) {
+        obs_sceneitem_set_visible(filter->scene_item, false);
+        return;
+    }
+
+    if (!filter->transform_dirty)
         return;
 
     if (!filter->selected_source || !filter->scene_item)
         return;
+
+    obs_sceneitem_set_visible(filter->scene_item, true);
 
     struct vec2 pos;
     pos.x = (float)filter->mark_x;
@@ -213,24 +221,18 @@ const char *get_filter_name(void *unused)
 //Only runs when filter is added to a source
 static void *filter_create(obs_data_t *settings, obs_source_t *source)
 {
-    struct aruco_data *filter =
-        (struct aruco_data *)bzalloc(sizeof(struct aruco_data));
-    
+    struct aruco_data *filter = (struct aruco_data *)bzalloc(sizeof(struct aruco_data));
+
     filter->source = source;
     filter->selected_source = NULL;
     filter->scene_item = NULL;
-
-    obs_source_t *scene_source = obs_frontend_get_current_scene();
-    obs_scene_t *scene = obs_scene_from_source(scene_source);
-    const char *source_name = obs_data_get_string(settings, "source_name");
-    filter->selected_source = obs_get_source_by_uuid(source_name);
-
-    if (scene && filter->selected_source) {
-        obs_scene_enum_items(scene, find_scene_item, filter);
-    }
+    
+    resolve_selected_source(filter);
+    resolve_selected_sceneitem(filter);
 
     filter->dictionary = cv::makePtr<cv::aruco::Dictionary>(cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
     filter->draw_marker = false;
+    filter->show_only_when_marker = true;
     filter->aruco_id = 0;
     filter->scaler_simple = NULL;
     filter->last_x = 0.0;
@@ -245,10 +247,7 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->mark_rotation = 0.0;
 
     obs_add_tick_callback(tick_callback, filter);
-    //filter_update(filter, settings);
     obs_source_update(source, settings);
-
-    obs_source_release(scene_source);
 
     return filter;
 }
@@ -364,7 +363,6 @@ static void filter_activate(void *data)
 
     resolve_selected_source(filter);
     resolve_selected_sceneitem(filter);
-
 }
 
 
@@ -372,37 +370,21 @@ static void filter_update(void *data, obs_data_t *settings)
 {
     struct aruco_data *filter = (struct aruco_data *)data;
     
-    const char *source_name = obs_data_get_string(settings, "source_name"); 
-
-    blog(LOG_INFO, source_name);
-
-    filter->scene_item = NULL;
-    obs_source_t *scene_source = obs_frontend_get_current_scene();
-    obs_scene_t *scene = obs_scene_from_source(scene_source);
+    resolve_selected_source(filter);
+    resolve_selected_sceneitem(filter);
 
     int id = (int)obs_data_get_int(settings, "aruco_id");
     bool draw_marker = obs_data_get_int(settings, "draw_marker");
+    bool show_only_when_marker = obs_data_get_bool(settings, "sceneitem_visibility");
     int skip_frames = (int)obs_data_get_int(settings, "skip_frames");
 
     double scaling_factor = obs_data_get_double(settings, "scaling_factor");
 
-    filter->selected_source = obs_get_source_by_uuid(source_name);
-
-    if (filter->selected_source == NULL)
-        blog(LOG_INFO, "Selected Source NULL");
-
-    if (scene && filter->selected_source) {
-        obs_scene_enum_items(scene, find_scene_item, filter);
-    }
-
-    filter->source_h = obs_source_get_height(filter->selected_source);
-    filter->source_w = obs_source_get_width(filter->selected_source);
     filter->aruco_id = id;
     filter->draw_marker = draw_marker;
+    filter->show_only_when_marker = show_only_when_marker;
     filter->skip = skip_frames;
     filter->scaling_factor = scaling_factor;
-
-    obs_source_release(scene_source);
 }
 
 
@@ -423,7 +405,8 @@ static obs_properties_t *filter_properties(void *data)
 
     group = obs_properties_create();
     obs_properties_add_int(group, "aruco_id", "ArUco ID", 0, 49, 1);
-    obs_properties_add_bool(group, "draw_marker", "Draw Marker");
+    //obs_properties_add_bool(group, "draw_marker", "Draw Marker"); May add in the future
+    obs_properties_add_bool(group, "sceneitem_visibility", "Show source only when ArUco is detected");
     obs_properties_add_int(group, "skip_frames", "Skip Frames", 0, 60, 1);
     obs_properties_add_group(props, "aruco_group", "ArUco Settings", OBS_GROUP_NORMAL, group);
     
