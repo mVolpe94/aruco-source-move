@@ -23,6 +23,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <opencv2/opencv.hpp>
 #include <opencv2/aruco.hpp>
 #include <media-io/video-scaler.h>
+#include <sstream>
+#include <string>
 
 using namespace cv;
 
@@ -30,6 +32,16 @@ OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 const char *FILTER_NAME = "ArUco Source Move";
+
+
+template <typename T>
+void log_var(const char* name, const T& value)
+{
+    std::ostringstream oss;
+    oss << name << " = " << value;
+    blog(LOG_INFO, "%s", oss.str().c_str());
+}
+
 
 struct aruco_data {
     // self reference
@@ -94,6 +106,9 @@ static void tick_callback(void *data, float seconds)
         return;
     }
 
+    log_var("mark size", filter->mark_size);
+    log_var("orig_width", filter->source_w);
+
     struct vec2 pos;
     pos.x = (float)filter->mark_x;
     pos.y = (float)filter->mark_y;
@@ -117,14 +132,22 @@ static void tick_callback(void *data, float seconds)
     scaled_size.y *= (float)filter->scaling_factor;
 
     struct vec2 obs_scale_factor;
-    obs_scale_factor.x = scaled_size.x / orig_size.x;
-    obs_scale_factor.y = scaled_size.x / orig_size.x;
+    obs_scale_factor.x = (float)filter->mark_size / orig_size.x;
+    obs_scale_factor.y = (float)filter->mark_size / orig_size.x;
+
+    log_var("scaling factor", filter->scaling_factor);
+
+    obs_scale_factor.x += (float)filter->scaling_factor; 
+    obs_scale_factor.y += (float)filter->scaling_factor;
+
+    if (obs_scale_factor.x < 0 || obs_scale_factor.y < 0) {
+        obs_scale_factor.x = 0;
+        obs_scale_factor.y = 0;
+    }
 
     obs_sceneitem_set_pos(filter->scene_item, &pos);
     obs_sceneitem_set_scale(filter->scene_item, &obs_scale_factor);
     obs_sceneitem_set_rot(filter->scene_item, (float)filter->mark_rotation);
-
-    blog(LOG_INFO, "%f", (float)filter->mark_x);
 
     return;
 }
@@ -140,6 +163,19 @@ const char *get_filter_name(void *unused)
 }
 
 
+static bool find_scene_item(obs_scene_t *scene, obs_sceneitem_t *item, void *data)
+{
+    aruco_data *filter = (aruco_data *)data;
+    obs_source_t *src = obs_sceneitem_get_source(item);
+
+    if (src == filter->selected_source) {
+        filter->scene_item = item;
+        return false;
+    }
+    return true;
+}
+
+
 //Only runs when filter is added to a source
 static void *filter_create(obs_data_t *settings, obs_source_t *source)
 {
@@ -148,6 +184,17 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     
     filter->source = source;
     filter->selected_source = NULL;
+    filter->scene_item = NULL;
+
+    obs_source_t *scene_source = obs_frontend_get_current_scene();
+    obs_scene_t *scene = obs_scene_from_source(scene_source);
+    const char *source_name = obs_data_get_string(settings, "source_name");
+    filter->selected_source = obs_get_source_by_uuid(source_name);
+
+    if (scene && filter->selected_source) {
+        obs_scene_enum_items(scene, find_scene_item, filter);
+    }
+
     filter->dictionary = cv::makePtr<cv::aruco::Dictionary>(cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
     filter->draw_marker = false;
     filter->aruco_id = 0;
@@ -170,6 +217,8 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter_update(filter, settings);
     obs_source_update(source, settings);
 
+    obs_source_release(scene_source);
+
     return filter;
 }
 
@@ -185,6 +234,8 @@ static void filter_destroy(void *data)
         video_scaler_destroy(filter->scaler_simple);
     if (filter->selected_source)
         obs_source_release(filter->selected_source);
+    if (filter->source)
+        obs_source_release(filter->source);
     obs_remove_tick_callback(tick_callback, filter);
     bfree(filter);
 }
@@ -326,16 +377,27 @@ static struct obs_source_frame *filter_video(void *data, struct obs_source_frame
 }
 
 
-static bool find_scene_item(obs_scene_t *scene, obs_sceneitem_t *item, void *data)
-{
-    aruco_data *filter = (aruco_data *)data;
-    obs_source_t *src = obs_sceneitem_get_source(item);
 
-    if (src == filter->selected_source) {
-        filter->scene_item = item;
-        return false;
+static void filter_activate(void *data)
+{
+    struct aruco_data *filter = (aruco_data *)data;
+    obs_data_t *settings = obs_source_get_settings(filter->source);
+
+    const char *source_name = obs_data_get_string(settings, "source_name");
+
+    obs_source_t *scene_source = obs_frontend_get_current_scene();
+    obs_scene_t *scene = obs_scene_from_source(scene_source);
+
+    filter->selected_source = obs_get_source_by_uuid(source_name);
+    filter->source_h = obs_source_get_height(filter->selected_source);
+    filter->source_w = obs_source_get_width(filter->selected_source);
+
+    if (scene && filter->selected_source) {
+        obs_scene_enum_items(scene, find_scene_item, filter);
     }
-    return true;
+
+    obs_data_release(settings);
+    obs_source_release(scene_source);
 }
 
 
@@ -356,9 +418,9 @@ static void filter_update(void *data, obs_data_t *settings)
     int min_move_distance = (int)obs_data_get_int(settings, "min_move_distance");
     int skip_frames = (int)obs_data_get_int(settings, "skip_frames");
 
-    double scaling_factor = obs_data_get_int(settings, "scaling_factor") / 100.0;
+    double scaling_factor = obs_data_get_double(settings, "scaling_factor");
 
-    filter->selected_source = obs_get_source_by_name(source_name);
+    filter->selected_source = obs_get_source_by_uuid(source_name);
 
     if (filter->selected_source == NULL)
         blog(LOG_INFO, "Selected Source NULL");
@@ -444,6 +506,7 @@ extern "C" struct obs_source_info filter_info = {
     .destroy = filter_destroy,
     .get_properties = filter_properties,
     .update = filter_update,
+    .activate = filter_activate,
     .filter_video = filter_video,
 };
 
