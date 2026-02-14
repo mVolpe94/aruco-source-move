@@ -54,14 +54,11 @@ struct aruco_data {
     // settings
     int aruco_id;
     bool draw_marker;
-    uint32_t min_move_distance;
 
     // aruco dict
     cv::Ptr<cv::aruco::Dictionary> dictionary;
 
     // video conversion for opencv
-    video_scaler_t *scaler_in;
-    video_scaler_t *scaler_out;
     video_scaler_t *scaler_simple;
 
     // last marker position in case lost detection
@@ -82,32 +79,17 @@ struct aruco_data {
 };
 
 
-
-
-
+//Runs every OBS tick to move the source on the screen when ArUco marker is found
 static void tick_callback(void *data, float seconds)
 {
-    UNUSED_PARAMETER(seconds);
-    
+    UNUSED_PARAMETER(seconds); 
     struct aruco_data *filter = (aruco_data *)data;
-
-    
 
     if (!filter->transform_dirty || !filter->marker_visible)
         return;
-    
-    filter->transform_dirty = false;
 
-    if (!filter->selected_source || !filter->scene_item) {
-        // if (filter->selected_source == NULL)
-        //     blog(LOG_INFO, "Selected Source NULL");
-        // if (filter->scene_item == NULL)
-        //     blog(LOG_INFO, "Scene Item NULL");
+    if (!filter->selected_source || !filter->scene_item)
         return;
-    }
-
-    log_var("mark size", filter->mark_size);
-    log_var("orig_width", filter->source_w);
 
     struct vec2 pos;
     pos.x = (float)filter->mark_x;
@@ -117,25 +99,9 @@ static void tick_callback(void *data, float seconds)
     orig_size.x = (float)filter->source_w;
     orig_size.y = (float)filter->source_h;
 
-    struct vec2 scaled_size;
-
-    if (orig_size.y > 0 && orig_size.x > 0) {
-        if (orig_size.x >= orig_size.y) {
-            scaled_size.y = (float)filter->mark_size;
-            scaled_size.x = (orig_size.x * scaled_size.y) / orig_size.y;
-        } else if (orig_size.x < orig_size.y) {
-            scaled_size.x = (float)filter->mark_size;
-            scaled_size.y = (orig_size.y * scaled_size.x) / orig_size.x;
-        }
-    }
-    scaled_size.x *= (float)filter->scaling_factor;
-    scaled_size.y *= (float)filter->scaling_factor;
-
     struct vec2 obs_scale_factor;
     obs_scale_factor.x = (float)filter->mark_size / orig_size.x;
     obs_scale_factor.y = (float)filter->mark_size / orig_size.x;
-
-    log_var("scaling factor", filter->scaling_factor);
 
     obs_scale_factor.x += (float)filter->scaling_factor; 
     obs_scale_factor.y += (float)filter->scaling_factor;
@@ -149,6 +115,8 @@ static void tick_callback(void *data, float seconds)
     obs_sceneitem_set_scale(filter->scene_item, &obs_scale_factor);
     obs_sceneitem_set_rot(filter->scene_item, (float)filter->mark_rotation);
 
+    filter->transform_dirty = false;
+
     return;
 }
 
@@ -156,6 +124,7 @@ static void tick_callback(void *data, float seconds)
 static void filter_update(void *data, obs_data_t *settings);
 
 
+//Simply returns the filter name
 const char *get_filter_name(void *unused)
 {
     UNUSED_PARAMETER(unused);
@@ -163,6 +132,7 @@ const char *get_filter_name(void *unused)
 }
 
 
+//This function grabs the scene item from a specified source and adds it to the filter struct
 static bool find_scene_item(obs_scene_t *scene, obs_sceneitem_t *item, void *data)
 {
     aruco_data *filter = (aruco_data *)data;
@@ -198,12 +168,9 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->dictionary = cv::makePtr<cv::aruco::Dictionary>(cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
     filter->draw_marker = false;
     filter->aruco_id = 0;
-    filter->scaler_in = NULL;
-    filter->scaler_out = NULL;
     filter->scaler_simple = NULL;
     filter->last_x = 0.0;
     filter->last_y = 0.0;
-    filter->min_move_distance = 5;
     filter->frame_counter = 0;
     filter->skip = 0;
     filter->scaling_factor = 0.00;
@@ -226,10 +193,6 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
 static void filter_destroy(void *data)
 {
     struct aruco_data *filter = (struct aruco_data *)data;
-    if (filter->scaler_in)
-        video_scaler_destroy(filter->scaler_in);
-    if (filter->scaler_out)
-        video_scaler_destroy(filter->scaler_out);
     if (filter->scaler_simple)
         video_scaler_destroy(filter->scaler_simple);
     if (filter->selected_source)
@@ -250,45 +213,6 @@ static struct obs_source_frame *filter_video(void *data, struct obs_source_frame
         return frame;
     }
     filter->frame_counter = 0;
-
-    // if (filter->scaler_in == NULL) {
-    //     struct video_scale_info origin;
-    //     origin.format = frame->format;
-    //     origin.width = frame->width;
-    //     origin.height = frame->height;
-    //     origin.range = frame->full_range ? VIDEO_RANGE_FULL : VIDEO_RANGE_PARTIAL;
-    //     origin.colorspace = VIDEO_CS_DEFAULT;
-    //     struct video_scale_info cv_frame;
-
-    //     struct video_scale_info dest;
-    //     dest.format = VIDEO_FORMAT_BGR3;
-    //     dest.width = frame->width;
-    //     dest.height = frame->height;
-    //     dest.range = VIDEO_RANGE_FULL;
-    //     dest.colorspace = VIDEO_CS_DEFAULT;
-
-    //     int is_scaler_created = video_scaler_create(&filter->scaler_in, &origin, &dest, VIDEO_SCALE_DEFAULT);
-    //     obs_log(LOG_INFO, "ArUco Source Move: video_scaler_create scaler_in returned %d", is_scaler_created);
-    // }
-
-    // if (filter->scaler_out == NULL) {
-    //     struct video_scale_info origin;
-    //     origin.format = VIDEO_FORMAT_BGR3;
-    //     origin.width = frame->width;
-    //     origin.height = frame->height;
-    //     origin.range = VIDEO_RANGE_FULL;
-    //     origin.colorspace = VIDEO_CS_DEFAULT;
-
-    //     struct video_scale_info dest;
-    //     dest.format = frame->format;
-    //     dest.width = frame->width;
-    //     dest.height = frame->height;
-    //     dest.range = frame->full_range ? VIDEO_RANGE_FULL : VIDEO_RANGE_PARTIAL;
-    //     dest.colorspace = VIDEO_CS_DEFAULT;
-
-    //     int is_scaler_created = video_scaler_create(&filter->scaler_out, &origin, &dest, VIDEO_SCALE_DEFAULT);
-    //     obs_log(LOG_INFO, "ArUco Source Move: video_scaler_create scaler_out returned %d", is_scaler_created);
-    // }
 
     if (filter->scaler_simple == NULL) {
         struct video_scale_info origin;
@@ -340,8 +264,6 @@ static struct obs_source_frame *filter_video(void *data, struct obs_source_frame
                 cx /= 4.0;
                 cy /= 4.0;
 
-
-
                 cv::Point2f v = corners[i][1] - corners[i][0];
                 double rotation_deg = (atan2(v.y, v.x) * 180 / CV_PI);
 
@@ -365,11 +287,6 @@ static struct obs_source_frame *filter_video(void *data, struct obs_source_frame
         }
     } else {
         obs_log(LOG_INFO, "ArUco Source Move: Image data missing or failed to load.");
-    }
-    
-    //May not want to use this
-    if (!filter->draw_marker){
-
     }
 
     obs_source_frame_destroy(scaled_frame);
@@ -415,7 +332,6 @@ static void filter_update(void *data, obs_data_t *settings)
 
     int id = (int)obs_data_get_int(settings, "aruco_id");
     bool draw_marker = obs_data_get_int(settings, "draw_marker");
-    int min_move_distance = (int)obs_data_get_int(settings, "min_move_distance");
     int skip_frames = (int)obs_data_get_int(settings, "skip_frames");
 
     double scaling_factor = obs_data_get_double(settings, "scaling_factor");
@@ -433,7 +349,6 @@ static void filter_update(void *data, obs_data_t *settings)
     filter->source_w = obs_source_get_width(filter->selected_source);
     filter->aruco_id = id;
     filter->draw_marker = draw_marker;
-    filter->min_move_distance = min_move_distance;
     filter->skip = skip_frames;
     filter->scaling_factor = scaling_factor;
 
@@ -482,7 +397,6 @@ static obs_properties_t *filter_properties(void *data)
     group = obs_properties_create();
     obs_properties_add_int(group, "aruco_id", "ArUco ID", 0, 49, 1);
     obs_properties_add_bool(group, "draw_marker", "Draw Marker");
-    obs_properties_add_int(group, "min_move_distance", "Minimum Move Distance (pixels)", 0, 100, 1);
     obs_properties_add_int(group, "skip_frames", "Skip Frames", 0, 60, 1);
     obs_properties_add_group(props, "aruco_group", "ArUco Settings", OBS_GROUP_NORMAL, group);
     
