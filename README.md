@@ -1,59 +1,30 @@
-# OBS Plugin Template
+# ArUco Source Move OBS Plugin
 
 ## Introduction
 
-The plugin template is meant to be used as a starting point for OBS Studio plugin development. It includes:
+This plugin gives OBS the functionality to detect ArUco markers using OpenCV plus Contrib Module: ArUco. Apply the filter to any video source and map a user chosen source within the same scene to the position, size and rotation of a specific detected ArUco marker. The files include:
 
-* Boilerplate plugin source code
-* A CMake project file
-* GitHub Actions workflows and repository actions
+* Plugin Source code (src folder)
+* CMakeLists.txt to build (requires OpenCV and Contrib)
 
 ## Supported Build Environments
 
-| Platform  | Tool   |
-|-----------|--------|
-| Windows   | Visual Studio 17 2022 |
-| macOS     | XCode 16.0 |
-| Windows, macOS  | CMake 3.30.5 |
-| Ubuntu 24.04 | CMake 3.28.3 |
-| Ubuntu 24.04 | `ninja-build` |
-| Ubuntu 24.04 | `pkg-config`
-| Ubuntu 24.04 | `build-essential` |
+| Platform | Tool                  |
+| -------- | --------------------- |
+| Windows  | Visual Studio 18 2026 |
+| Windows  | CMake 4.2.2           |
+## Using the Plugin
 
-## Quick Start
-
-An absolute bare-bones [Quick Start Guide](https://github.com/obsproject/obs-plugintemplate/wiki/Quick-Start-Guide) is available in the wiki.
-
-## Documentation
-
-All documentation can be found in the [Plugin Template Wiki](https://github.com/obsproject/obs-plugintemplate/wiki).
-
-Suggested reading to get up and running:
-
-* [Getting started](https://github.com/obsproject/obs-plugintemplate/wiki/Getting-Started)
-* [Build system requirements](https://github.com/obsproject/obs-plugintemplate/wiki/Build-System-Requirements)
-* [Build system options](https://github.com/obsproject/obs-plugintemplate/wiki/CMake-Build-System-Options)
-
-## GitHub Actions & CI
-
-Default GitHub Actions workflows are available for the following repository actions:
-
-* `push`: Run for commits or tags pushed to `master` or `main` branches.
-* `pr-pull`: Run when a Pull Request has been pushed or synchronized.
-* `dispatch`: Run when triggered by the workflow dispatch in GitHub's user interface.
-* `build-project`: Builds the actual project and is triggered by other workflows.
-* `check-format`: Checks CMake and plugin source code formatting and is triggered by other workflows.
-
-The workflows make use of GitHub repository actions (contained in `.github/actions`) and build scripts (contained in `.github/scripts`) which are not needed for local development, but might need to be adjusted if additional/different steps are required to build the plugin.
-
-### Retrieving build artifacts
-
-Successful builds on GitHub Actions will produce build artifacts that can be downloaded for testing. These artifacts are commonly simple archives and will not contain package installers or installation programs.
-
-### Building a Release
-
-To create a release, an appropriately named tag needs to be pushed to the `main`/`master` branch using semantic versioning (e.g., `12.3.4`, `23.4.5-beta2`). A draft release will be created on the associated repository with generated installer packages or installation programs attached as release artifacts.
-
-## Signing and Notarizing on macOS
-
-Basic concepts of codesigning and notarization on macOS are explained in the correspodning [Wiki article](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS) which has a specific section for the [GitHub Actions setup](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS#setting-up-code-signing-for-github-actions).
+1. Install plugin by either running the installer 
+	- Instead of running the installer, you may just place the "aruco-source-move.dll" and "aruco-source-move.pdb" files to the directory that your copy of OBS looks for plugins.
+2. Open OBS
+3. On a video source you would like to track ArUco markers open the filters menu and add the ArUco Source Move filter to the Audio/Video Filters section.
+4. Choose a source for the filter to act upon (This should be the source you want to move around to the ArUco marker)
+	- NOTE: This menu only finds sources within the same scene as the video source that the filter is placed in.
+5. Update the ArUco ID to match the specific ArUco marker ID that you are planning to track.
+	- Look [here](https://www.geeksforgeeks.org/computer-vision/detecting-aruco-markers-with-opencv-and-python-1/)  or [here](https://docs.opencv.org/4.x/d5/dae/tutorial_aruco_detection.html) for more info
+	- Go [here](https://chev.me/arucogen/) to generate ArUco markers
+6. Set the next settings as you prefer
+	- "Show source only when marker is detected" will toggle the visibility of the selected source off and on when the ArUco marker is either detected or not
+	- "Skip Frames" will skip frames of detection to cut down on resources
+	- "Scaling Factor" allows you to change the size of the selected source relative to the size of the ArUco marker. If you don't want to see the marker behind your source, you can make the source bigger to compensate.

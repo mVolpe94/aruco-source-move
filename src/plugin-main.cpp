@@ -422,7 +422,7 @@ static obs_properties_t *filter_properties(void *data)
 
 
 extern "C" struct obs_source_info filter_info = {
-    .id = "aruco_source_move",
+    .id = "aruco-source-move",
     .type = OBS_SOURCE_TYPE_FILTER,
     .output_flags = OBS_SOURCE_ASYNC_VIDEO,
     .get_name = get_filter_name,
