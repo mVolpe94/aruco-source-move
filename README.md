@@ -25,6 +25,7 @@ The files include:
 3. On a video source you would like to track ArUco markers open the filters menu and add the ArUco Source Move filter to the Audio/Video Filters section.
 4. Choose a source for the filter to act upon (This should be the source you want to move around to the ArUco marker)
 	- NOTE: This menu only finds sources within the same scene as the video source that the filter is placed in.
+    - NOTE: The source you choose MUST be set to have a center positional alignment.
 5. Update the ArUco ID to match the specific ArUco marker ID that you are planning to track.
 	- Look [here](https://www.geeksforgeeks.org/computer-vision/detecting-aruco-markers-with-opencv-and-python-1/)  or [here](https://docs.opencv.org/4.x/d5/dae/tutorial_aruco_detection.html) for more info
 	- Go [here](https://chev.me/arucogen/) to generate ArUco markers
