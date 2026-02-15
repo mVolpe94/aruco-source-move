@@ -15,7 +15,7 @@ The files include:
 
 | Platform | Tool                  |
 | -------- | --------------------- |
-| Windows  | Visual Studio 18 2026 |
+| Windows  | Visual Studio 17 2022 |
 | Windows  | CMake 4.2.2           |
 ## Using the Plugin
 
