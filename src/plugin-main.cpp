@@ -37,10 +37,21 @@ const char *FILTER_NAME = "ArUco Source Move";
 struct aruco_data {
     // self reference
     obs_source_t *source;
+    obs_source_t *base_source;
+    obs_scene_t *base_scene;
+    obs_sceneitem_t *base_sceneitem;
+    vec2 bsource_pos;
+    vec2 bsource_scale;
+
+    // helper references
+    obs_source_t *search_source;
+    obs_sceneitem_t *search_sceneitem;
+    
+    // selected source reference
     obs_source_t *selected_source;
     obs_sceneitem_t *scene_item;
-    int source_w;
-    int source_h;
+    int ssource_w;
+    int ssource_h;
 
     // settings
     int aruco_id;
@@ -113,8 +124,9 @@ static bool find_scene_item(obs_scene_t *scene, obs_sceneitem_t *item, void *dat
     aruco_data *filter = (aruco_data *)data;
     obs_source_t *src = obs_sceneitem_get_source(item);
 
-    if (src == filter->selected_source) {
-        filter->scene_item = item;
+    if (src == filter->search_source) {
+        filter->search_sceneitem = item;
+        log_var("Found Scene Item", obs_sceneitem_get_id(item));
         return false;
     }
     return true;
@@ -140,20 +152,24 @@ static void tick_callback(void *data, float seconds)
 
     obs_sceneitem_set_visible(filter->scene_item, true);
 
+    //Gets the base source position and scale to use as a starting point for the marker movement
+    obs_sceneitem_get_pos(filter->base_sceneitem, &filter->bsource_pos);
+    obs_sceneitem_get_scale(filter->base_sceneitem, &filter->bsource_scale);
+
     struct vec2 pos;
-    pos.x = (float)filter->mark_x;
-    pos.y = (float)filter->mark_y;
+    pos.x = (float)filter->mark_x * filter->bsource_scale.x + filter->bsource_pos.x;
+    pos.y = (float)filter->mark_y * filter->bsource_scale.y + filter->bsource_pos.y;
 
     struct vec2 orig_size;
-    orig_size.x = (float)filter->source_w;
-    orig_size.y = (float)filter->source_h;
+    orig_size.x = (float)filter->ssource_w;
+    orig_size.y = (float)filter->ssource_h;
 
     //This maintains the aspect ratio of the source by scaling based on the shorter side of the source and the marker size
     float short_side_size = std::min(orig_size.x, orig_size.y);
 
     struct vec2 obs_scale_factor;
-    obs_scale_factor.x = (float)filter->mark_size / short_side_size;
-    obs_scale_factor.y = (float)filter->mark_size / short_side_size;
+    obs_scale_factor.x = ((float)filter->mark_size / short_side_size) * filter->bsource_scale.x;
+    obs_scale_factor.y = ((float)filter->mark_size / short_side_size) * filter->bsource_scale.y;
 
     obs_scale_factor.x += obs_scale_factor.x * (float)filter->scaling_factor; 
     obs_scale_factor.y += obs_scale_factor.y * (float)filter->scaling_factor;
@@ -186,8 +202,8 @@ static void resolve_selected_source(aruco_data *filter)
 
     filter->selected_source = obs_get_source_by_uuid(source_name);
 
-    filter->source_h = obs_source_get_height(filter->selected_source);
-    filter->source_w = obs_source_get_width(filter->selected_source);
+    filter->ssource_h = obs_source_get_height(filter->selected_source);
+    filter->ssource_w = obs_source_get_width(filter->selected_source);
 
     obs_data_release(settings);
 
@@ -196,12 +212,14 @@ static void resolve_selected_source(aruco_data *filter)
 
 
 //Populates the sceneitem inside the state of the plugin
-static void resolve_selected_sceneitem(aruco_data *filter)
+static void resolve_selected_sceneitem(aruco_data *filter, obs_source_t *source_to_search)
 {
+    filter->search_source = source_to_search;
+
     obs_source_t *scene_source = obs_frontend_get_current_scene();
     obs_scene_t *scene = obs_scene_from_source(scene_source);
 
-    if (scene && filter->selected_source) {
+    if (scene && filter->search_source) {
         obs_scene_enum_items(scene, find_scene_item, filter);
     }
 
@@ -229,9 +247,15 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->source = source;
     filter->selected_source = NULL;
     filter->scene_item = NULL;
+    filter->base_source = NULL;
     
     resolve_selected_source(filter);
-    resolve_selected_sceneitem(filter);
+    resolve_selected_sceneitem(filter, filter->selected_source);
+    filter->selected_source = filter->search_source;
+    filter->scene_item = filter->search_sceneitem;
+    resolve_selected_sceneitem(filter, filter->base_source);
+    filter->base_source = filter->search_source;
+    filter->base_sceneitem = filter->search_sceneitem;
 
     filter->dictionary = cv::makePtr<cv::aruco::Dictionary>(cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
     filter->draw_marker = false;
@@ -256,6 +280,20 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
 }
 
 
+static void filter_activate(void *data)
+{
+    struct aruco_data *filter = (aruco_data *)data;
+
+    resolve_selected_source(filter);
+    resolve_selected_sceneitem(filter, filter->selected_source);
+    filter->selected_source = filter->search_source;
+    filter->scene_item = filter->search_sceneitem;
+    resolve_selected_sceneitem(filter, filter->base_source);
+    filter->base_source = filter->search_source;
+    filter->base_sceneitem = filter->search_sceneitem;
+}
+
+
 static void filter_destroy(void *data)
 {
     struct aruco_data *filter = (struct aruco_data *)data;
@@ -273,6 +311,11 @@ static void filter_destroy(void *data)
 static struct obs_source_frame *filter_video(void *data, struct obs_source_frame *frame)
 {
     struct aruco_data *filter = (struct aruco_data *)data;
+
+    if (filter->base_source == NULL) {
+        filter->base_source = obs_filter_get_parent(filter->source);
+        filter_activate(filter);
+    }
 
     filter->frame_counter++;
     if (filter->skip > 0 && filter->frame_counter < filter->skip) {
@@ -360,21 +403,17 @@ static struct obs_source_frame *filter_video(void *data, struct obs_source_frame
 }
 
 
-static void filter_activate(void *data)
-{
-    struct aruco_data *filter = (aruco_data *)data;
-
-    resolve_selected_source(filter);
-    resolve_selected_sceneitem(filter);
-}
-
-
 static void filter_update(void *data, obs_data_t *settings)
 {
     struct aruco_data *filter = (struct aruco_data *)data;
     
     resolve_selected_source(filter);
-    resolve_selected_sceneitem(filter);
+    resolve_selected_sceneitem(filter, filter->selected_source);
+    filter->selected_source = filter->search_source;
+    filter->scene_item = filter->search_sceneitem;
+    resolve_selected_sceneitem(filter, filter->base_source);
+    filter->base_source = filter->search_source;
+    filter->base_sceneitem = filter->search_sceneitem;
 
     int id = (int)obs_data_get_int(settings, "aruco_id");
     bool draw_marker = obs_data_get_int(settings, "draw_marker");
