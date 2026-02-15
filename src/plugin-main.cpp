@@ -148,12 +148,15 @@ static void tick_callback(void *data, float seconds)
     orig_size.x = (float)filter->source_w;
     orig_size.y = (float)filter->source_h;
 
-    struct vec2 obs_scale_factor;
-    obs_scale_factor.x = (float)filter->mark_size / orig_size.x;
-    obs_scale_factor.y = (float)filter->mark_size / orig_size.x;
+    //This maintains the aspect ratio of the source by scaling based on the shorter side of the source and the marker size
+    float short_side_size = std::min(orig_size.x, orig_size.y);
 
-    obs_scale_factor.x += (float)filter->scaling_factor; 
-    obs_scale_factor.y += (float)filter->scaling_factor;
+    struct vec2 obs_scale_factor;
+    obs_scale_factor.x = (float)filter->mark_size / short_side_size;
+    obs_scale_factor.y = (float)filter->mark_size / short_side_size;
+
+    obs_scale_factor.x += obs_scale_factor.x * (float)filter->scaling_factor; 
+    obs_scale_factor.y += obs_scale_factor.y * (float)filter->scaling_factor;
 
     if (obs_scale_factor.x < 0 || obs_scale_factor.y < 0) {
         obs_scale_factor.x = 0;
