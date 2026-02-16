@@ -5,7 +5,7 @@
 This plugin gives OBS the functionality to detect ArUco markers using OpenCV plus Contrib Module: ArUco. Apply the filter to any video source and map a user chosen source within the same scene to the position, size and rotation of a specific detected ArUco marker. 
 
 Left side, plugin inactive, right side plugin active:
-![Example Video](images/READMEgif.gif)
+![Example Video](images/readmegifbig.gif)
 
 The files include:
 * Plugin Source code (src folder)
@@ -92,7 +92,7 @@ To build this plugin, you will need a working build of OpenCV with Contrib Modul
 
 I made this plugin so that I could create cool alerts for my Twitch stream! I was inspired by Nutty's wild alerts that he used extensive chains of Move plugin filters to achieve. What I planned to do was create something similar that would run when someone raids me. There will be a video playing and my profile picture is on one character's face and I wanted my raider's profile picture to be on the other.
 
-![Example Video](images/READMEgif.gif)
+![Example Video](images/readmegifbig.gif)
 
 So, I made a video with an ArUco marker for my raider's face (left side) that through use of this plugin, will be replaced by a browser source linked to my raider's profile picture (right side). Something to make my raider feel special and make their community have fun!
 
