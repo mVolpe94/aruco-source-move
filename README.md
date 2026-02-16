@@ -82,9 +82,8 @@ To build this plugin, you will need a working build of OpenCV with Contrib Modul
 
 ## Things to Keep in Mind
 
-- **Currently this only works well for full screen video sources** - It tracks to full canvas size, so if you have a webcam feed that takes up a quarter of the screen, the source will move around the entire available canvas instead of just where the marker is. (WIP)
 - This cannot be used to determine the tilt of the ArUco marker, in fact, I have reason to believe that a marker that is being tilted in one direction or another may cause the rotation of the source to not behave as expected. I created this to be used by an ArUco marker that I knew was always vertical flat to the screen.
-- CPU usage on this plugin is high due to the use of computer vision
+- CPU usage on this plugin is high due to the use of computer vision (7-11%)
 	- I plan to work on ways to cut the usage down. If anyone has any tips, please send me a message!
 - If a marker is only half on screen or obstructed, detection may not work as intended
 - If you have any questions or suggestions, please reach out!
