@@ -126,7 +126,6 @@ static bool find_scene_item(obs_scene_t *scene, obs_sceneitem_t *item, void *dat
 
     if (src == filter->search_source) {
         filter->search_sceneitem = item;
-        log_var("Found Scene Item", obs_sceneitem_get_id(item));
         return false;
     }
     return true;
@@ -228,6 +227,18 @@ static void resolve_selected_sceneitem(aruco_data *filter, obs_source_t *source_
 }
 
 
+static void resolve_sources(aruco_data *filter)
+{
+    resolve_selected_source(filter);
+    resolve_selected_sceneitem(filter, filter->selected_source);
+    filter->selected_source = filter->search_source;
+    filter->scene_item = filter->search_sceneitem;
+    resolve_selected_sceneitem(filter, filter->base_source);
+    filter->base_source = filter->search_source;
+    filter->base_sceneitem = filter->search_sceneitem;
+}
+
+
 //----OBS Specific Functions----//
 
 
@@ -249,13 +260,7 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->scene_item = NULL;
     filter->base_source = NULL;
     
-    resolve_selected_source(filter);
-    resolve_selected_sceneitem(filter, filter->selected_source);
-    filter->selected_source = filter->search_source;
-    filter->scene_item = filter->search_sceneitem;
-    resolve_selected_sceneitem(filter, filter->base_source);
-    filter->base_source = filter->search_source;
-    filter->base_sceneitem = filter->search_sceneitem;
+    resolve_sources(filter);
 
     filter->dictionary = cv::makePtr<cv::aruco::Dictionary>(cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
     filter->draw_marker = false;
@@ -284,13 +289,7 @@ static void filter_activate(void *data)
 {
     struct aruco_data *filter = (aruco_data *)data;
 
-    resolve_selected_source(filter);
-    resolve_selected_sceneitem(filter, filter->selected_source);
-    filter->selected_source = filter->search_source;
-    filter->scene_item = filter->search_sceneitem;
-    resolve_selected_sceneitem(filter, filter->base_source);
-    filter->base_source = filter->search_source;
-    filter->base_sceneitem = filter->search_sceneitem;
+    resolve_sources(filter);
 }
 
 
@@ -314,7 +313,11 @@ static struct obs_source_frame *filter_video(void *data, struct obs_source_frame
 
     if (filter->base_source == NULL) {
         filter->base_source = obs_filter_get_parent(filter->source);
-        filter_activate(filter);
+        if (filter->base_source) {
+            resolve_selected_sceneitem(filter, filter->base_source);
+            filter->base_source = filter->search_source;
+            filter->base_sceneitem = filter->search_sceneitem;
+        }
     }
 
     filter->frame_counter++;
@@ -407,13 +410,7 @@ static void filter_update(void *data, obs_data_t *settings)
 {
     struct aruco_data *filter = (struct aruco_data *)data;
     
-    resolve_selected_source(filter);
-    resolve_selected_sceneitem(filter, filter->selected_source);
-    filter->selected_source = filter->search_source;
-    filter->scene_item = filter->search_sceneitem;
-    resolve_selected_sceneitem(filter, filter->base_source);
-    filter->base_source = filter->search_source;
-    filter->base_sceneitem = filter->search_sceneitem;
+    resolve_sources(filter);
 
     int id = (int)obs_data_get_int(settings, "aruco_id");
     bool draw_marker = obs_data_get_int(settings, "draw_marker");
