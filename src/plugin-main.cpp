@@ -57,6 +57,8 @@ struct aruco_data {
     int aruco_id;
     bool draw_marker;
     bool show_only_when_marker;
+    bool rotation_on;
+    bool scaling_on;
 
     // aruco dict
     cv::Ptr<cv::aruco::Dictionary> dictionary;
@@ -68,6 +70,14 @@ struct aruco_data {
     double last_x, last_y;
     uint32_t frame_counter;
     uint8_t skip;
+
+    // smoothing variables for easing
+    double easing_factor_pos;
+    double easing_factor_rot;
+    double easing_factor_scale;
+    double smooth_x, smooth_y;
+    double smooth_rotation;
+    double smooth_scale;
 
     // marker state
     bool marker_visible;
@@ -170,17 +180,30 @@ static void tick_callback(void *data, float seconds)
     obs_scale_factor.x = ((float)filter->mark_size / short_side_size) * filter->bsource_scale.x;
     obs_scale_factor.y = ((float)filter->mark_size / short_side_size) * filter->bsource_scale.y;
 
+    log_var("obs_scale_factor.x before scaling factor", obs_scale_factor.x);
+    log_var("obs_scale_factor.y before scaling factor", obs_scale_factor.y);
+
     obs_scale_factor.x += obs_scale_factor.x * (float)filter->scaling_factor; 
     obs_scale_factor.y += obs_scale_factor.y * (float)filter->scaling_factor;
+
+    log_var("obs_scale_factor.x after scaling factor", obs_scale_factor.x);
+    log_var("obs_scale_factor.y after scaling factor", obs_scale_factor.y);
 
     if (obs_scale_factor.x < 0 || obs_scale_factor.y < 0) {
         obs_scale_factor.x = 0;
         obs_scale_factor.y = 0;
     }
 
+    
     obs_sceneitem_set_pos(filter->scene_item, &pos);
-    obs_sceneitem_set_scale(filter->scene_item, &obs_scale_factor);
-    obs_sceneitem_set_rot(filter->scene_item, (float)filter->mark_rotation);
+
+    if (filter->scaling_on) {
+        obs_sceneitem_set_scale(filter->scene_item, &obs_scale_factor);
+    }
+    
+    if (filter->rotation_on) {
+        obs_sceneitem_set_rot(filter->scene_item, (float)filter->mark_rotation);
+    }
 
     filter->transform_dirty = false;
 
@@ -277,6 +300,15 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->mark_y = 0.0;
     filter->mark_size = 0.0;
     filter->mark_rotation = 0.0;
+    filter->rotation_on = true;
+    filter->scaling_on = true;
+    filter->easing_factor_pos = 0.20;
+    filter->easing_factor_rot = 0.20;
+    filter->easing_factor_scale = 0.20;
+    filter->smooth_x = 0.0;
+    filter->smooth_y = 0.0;
+    filter->smooth_rotation = 0.0;
+    filter->smooth_scale = 0.0;
 
     obs_add_tick_callback(tick_callback, filter);
     obs_source_update(source, settings);
@@ -415,15 +447,26 @@ static void filter_update(void *data, obs_data_t *settings)
     int id = (int)obs_data_get_int(settings, "aruco_id");
     bool draw_marker = obs_data_get_int(settings, "draw_marker");
     bool show_only_when_marker = obs_data_get_bool(settings, "sceneitem_visibility");
+    bool scaling_on = obs_data_get_bool(settings, "scaling_on");
+    bool rotation_on = obs_data_get_bool(settings, "rotation_on");
     int skip_frames = (int)obs_data_get_int(settings, "skip_frames");
 
     double scaling_factor = obs_data_get_double(settings, "scaling_factor");
 
+    double easing_factor_pos = obs_data_get_double(settings, "position_easing_factor");
+    double easing_factor_rot = obs_data_get_double(settings, "rotation_easing_factor");
+    double easing_factor_scale = obs_data_get_double(settings, "scaling_easing_factor");
+
     filter->aruco_id = id;
+    filter->scaling_on = scaling_on;
+    filter->rotation_on = rotation_on;
     filter->draw_marker = draw_marker;
     filter->show_only_when_marker = show_only_when_marker;
     filter->skip = skip_frames;
     filter->scaling_factor = scaling_factor;
+    filter->easing_factor_pos = easing_factor_pos;
+    filter->easing_factor_rot = easing_factor_rot;
+    filter->easing_factor_scale = easing_factor_scale;
 }
 
 
@@ -448,15 +491,45 @@ static obs_properties_t *filter_properties(void *data)
     obs_properties_add_bool(group, "sceneitem_visibility", "Show source only when ArUco is detected");
     obs_properties_add_int(group, "skip_frames", "Skip Frames", 0, 60, 1);
     obs_properties_add_group(props, "aruco_group", "ArUco Settings", OBS_GROUP_NORMAL, group);
+
+    obs_properties_t *transform = obs_properties_create();
+
+    //Position settings
+    obs_properties_t *position = obs_properties_create();
+    obs_properties_add_float_slider(position, "position_easing_factor", "Position Easing Factor", 0.00, 1.00, 0.01);
+    obs_properties_add_group(transform, "position_group", "Position Settings  -  Enables Position Tracking", OBS_GROUP_CHECKABLE, position);
+
+    //Scaling settings
+    obs_properties_t *scaling = obs_properties_create();
+    obs_properties_add_float_slider(scaling, "scaling_factor", "Scaling Factor", -1.00, 10.00, 0.01);
+    obs_properties_add_float_slider(scaling, "scaling_easing_factor", "Scaling Easing Factor", 0.00, 1.00, 0.01);
+    obs_properties_add_group(transform, "scaling_group", "Scaling Settings  -  Enables Scale Tracking", OBS_GROUP_CHECKABLE, scaling);
     
-    group = obs_properties_create();
-    
-    obs_properties_add_float_slider(group, "scaling_factor", "Scaling Factor", -1.00, 1.00, 0.01);
-    obs_properties_add_group(props, "scaling_group", "Scaling Settings", OBS_GROUP_NORMAL, group);
+    //Rotation settings
+    obs_properties_t *rotation = obs_properties_create();
+    obs_properties_add_float_slider(rotation, "rotation_easing_factor", "Rotation Easing Factor", 0.00, 1.00, 0.01);
+    obs_properties_add_group(transform, "rotation_group", "Rotation Settings  -  Enables Rotation Tracking", OBS_GROUP_CHECKABLE, rotation);
+
+    obs_properties_add_group(props, "scaling_group", "Transform Settings", OBS_GROUP_NORMAL, transform);
 
     obs_source_release(parent);
 
     return props;
+}
+
+
+static void filter_defaults(obs_data_t *settings)
+{
+    obs_data_set_default_int(settings, "aruco_id", 0);
+    obs_data_set_default_bool(settings, "draw_marker", false);
+    obs_data_set_default_bool(settings, "sceneitem_visibility", true);
+    obs_data_set_default_int(settings, "skip_frames", 0);
+    obs_data_set_default_double(settings, "position_easing_factor", 0.20);
+    obs_data_set_default_double(settings, "rotation_easing_factor", 0.20);
+    obs_data_set_default_double(settings, "scaling_easing_factor", 0.20);
+    obs_data_set_default_bool(settings, "scaling_on", true);
+    obs_data_set_default_double(settings, "scaling_factor", 0.00);
+    obs_data_set_default_bool(settings, "rotation_on", true);
 }
 
 
@@ -467,6 +540,7 @@ extern "C" struct obs_source_info filter_info = {
     .get_name = get_filter_name,
     .create = filter_create,
     .destroy = filter_destroy,
+    .get_defaults = filter_defaults,
     .get_properties = filter_properties,
     .update = filter_update,
     .activate = filter_activate,
