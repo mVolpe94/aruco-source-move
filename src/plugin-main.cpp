@@ -194,7 +194,7 @@ static void tick_callback(void *data, float seconds)
         obs_scale_factor.y = 0;
     }
 
-    
+    // NEED TO CHANGE HOW CHECKS ARE ASSIGNED WITHIN UPDATE FUNCTION DUE TO CHANGE IN PROPERTY GROUPINGS
     obs_sceneitem_set_pos(filter->scene_item, &pos);
 
     if (filter->scaling_on) {
