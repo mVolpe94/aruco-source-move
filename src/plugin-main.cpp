@@ -59,6 +59,7 @@ struct aruco_data {
     bool show_only_when_marker;
     bool rotation_on;
     bool scaling_on;
+    bool position_on;
 
     // aruco dict
     cv::Ptr<cv::aruco::Dictionary> dictionary;
@@ -195,7 +196,10 @@ static void tick_callback(void *data, float seconds)
     }
 
     // NEED TO CHANGE HOW CHECKS ARE ASSIGNED WITHIN UPDATE FUNCTION DUE TO CHANGE IN PROPERTY GROUPINGS
-    obs_sceneitem_set_pos(filter->scene_item, &pos);
+    if (filter->position_on) {
+        obs_sceneitem_set_pos(filter->scene_item, &pos);
+    }
+    
 
     if (filter->scaling_on) {
         obs_sceneitem_set_scale(filter->scene_item, &obs_scale_factor);
@@ -302,6 +306,7 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->mark_rotation = 0.0;
     filter->rotation_on = true;
     filter->scaling_on = true;
+    filter->position_on = true;
     filter->easing_factor_pos = 0.20;
     filter->easing_factor_rot = 0.20;
     filter->easing_factor_scale = 0.20;
@@ -447,8 +452,9 @@ static void filter_update(void *data, obs_data_t *settings)
     int id = (int)obs_data_get_int(settings, "aruco_id");
     bool draw_marker = obs_data_get_int(settings, "draw_marker");
     bool show_only_when_marker = obs_data_get_bool(settings, "sceneitem_visibility");
-    bool scaling_on = obs_data_get_bool(settings, "scaling_on");
-    bool rotation_on = obs_data_get_bool(settings, "rotation_on");
+    bool scaling_on = obs_data_get_bool(settings, "scaling_group");
+    bool rotation_on = obs_data_get_bool(settings, "rotation_group");
+    bool position_on = obs_data_get_bool(settings, "position_group");
     int skip_frames = (int)obs_data_get_int(settings, "skip_frames");
 
     double scaling_factor = obs_data_get_double(settings, "scaling_factor");
@@ -460,6 +466,7 @@ static void filter_update(void *data, obs_data_t *settings)
     filter->aruco_id = id;
     filter->scaling_on = scaling_on;
     filter->rotation_on = rotation_on;
+    filter->position_on = position_on;
     filter->draw_marker = draw_marker;
     filter->show_only_when_marker = show_only_when_marker;
     filter->skip = skip_frames;
@@ -527,9 +534,10 @@ static void filter_defaults(obs_data_t *settings)
     obs_data_set_default_double(settings, "position_easing_factor", 0.20);
     obs_data_set_default_double(settings, "rotation_easing_factor", 0.20);
     obs_data_set_default_double(settings, "scaling_easing_factor", 0.20);
-    obs_data_set_default_bool(settings, "scaling_on", true);
+    obs_data_set_default_bool(settings, "scaling_group", true);
     obs_data_set_default_double(settings, "scaling_factor", 0.00);
-    obs_data_set_default_bool(settings, "rotation_on", true);
+    obs_data_set_default_bool(settings, "rotation_group", true);
+    obs_data_set_default_bool(settings, "position_group", true);
 }
 
 
