@@ -536,7 +536,7 @@ static obs_properties_t *filter_properties(void *data)
     obs_properties_add_int(group, ARUCO_ID, "ArUco ID", 0, 49, 1);
     //obs_properties_add_bool(group, "draw_marker", "Draw Marker"); May add in the future
     obs_properties_add_bool(group, SCENEITEM_VISIBILITY, "Show source only when ArUco is detected");
-    obs_properties_add_int(group, SCENEITEM_VISIBILITY_DELAY, "Scene Item Visibility Delay (frames)", 0, 60000, 1);
+    obs_properties_add_int(group, SCENEITEM_VISIBILITY_DELAY, "Source Visibility Delay (frames)", 0, 60000, 1);
     obs_properties_add_int(group, SKIP_FRAMES, "Skip Frames", 0, 60, 1);
     obs_properties_add_group(props, ARUCO_GROUP, "ArUco Settings", OBS_GROUP_NORMAL, group);
 
