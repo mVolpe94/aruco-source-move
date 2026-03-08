@@ -51,6 +51,7 @@ const double SLIDER_GRANULARITY = 0.01; // slider step size
 #define ARUCO_GROUP "aruco_group"
 #define ARUCO_ID "aruco_id"
 #define SCENEITEM_VISIBILITY "sceneitem_visibility"
+#define SCENEITEM_VISIBILITY_DELAY "sceneitem_visibility_delay"
 #define SKIP_FRAMES "skip_frames"
 #define POSITION_EASING_FACTOR "position_easing_factor"
 #define ROTATION_EASING_FACTOR "rotation_easing_factor"

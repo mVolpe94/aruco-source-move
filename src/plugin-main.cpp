@@ -57,6 +57,8 @@ struct aruco_data {
     int aruco_id;
     bool draw_marker;
     bool show_only_when_marker;
+    int sceneitem_visibility_delay;
+    int visibility_delay_counter;
     bool rotation_on;
     bool scaling_on;
     bool position_on;
@@ -162,8 +164,12 @@ static void tick_callback(void *data, float seconds)
     struct aruco_data *filter = (aruco_data *)data;
 
     if (!filter->marker_visible && filter->show_only_when_marker) {
-        obs_sceneitem_set_visible(filter->scene_item, false);
-        filter->first_frame = true;
+        filter->visibility_delay_counter++;
+        if (filter->visibility_delay_counter >= filter->sceneitem_visibility_delay) {
+            obs_sceneitem_set_visible(filter->scene_item, false);
+            filter->first_frame = true;
+            filter->visibility_delay_counter = 0;   
+        }
         return;
     }
 
@@ -322,6 +328,8 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
     filter->dictionary = cv::makePtr<cv::aruco::Dictionary>(cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
     filter->draw_marker = false;
     filter->show_only_when_marker = true;
+    filter->sceneitem_visibility_delay = 0;
+    filter->visibility_delay_counter = 0;
     filter->aruco_id = 0;
     filter->scaler_simple = NULL;
     filter->last_x = 0.0;
@@ -482,6 +490,7 @@ static void filter_update(void *data, obs_data_t *settings)
     int id = (int)obs_data_get_int(settings, ARUCO_ID);
     bool draw_marker = obs_data_get_int(settings, "draw_marker");
     bool show_only_when_marker = obs_data_get_bool(settings, SCENEITEM_VISIBILITY);
+    int visibility_delay = (int)obs_data_get_int(settings, SCENEITEM_VISIBILITY_DELAY);
     bool scaling_on = obs_data_get_bool(settings, SCALING_GROUP);
     bool rotation_on = obs_data_get_bool(settings, ROTATION_GROUP);
     bool position_on = obs_data_get_bool(settings, POSITION_GROUP);
@@ -499,6 +508,7 @@ static void filter_update(void *data, obs_data_t *settings)
     filter->position_on = position_on;
     filter->draw_marker = draw_marker;
     filter->show_only_when_marker = show_only_when_marker;
+    filter->sceneitem_visibility_delay = visibility_delay;
     filter->skip = skip_frames;
     filter->scaling_factor = scaling_factor;
     filter->easing_factor_pos = easing_factor_pos;
@@ -526,6 +536,7 @@ static obs_properties_t *filter_properties(void *data)
     obs_properties_add_int(group, ARUCO_ID, "ArUco ID", 0, 49, 1);
     //obs_properties_add_bool(group, "draw_marker", "Draw Marker"); May add in the future
     obs_properties_add_bool(group, SCENEITEM_VISIBILITY, "Show source only when ArUco is detected");
+    obs_properties_add_int(group, SCENEITEM_VISIBILITY_DELAY, "Scene Item Visibility Delay (frames)", 0, 60000, 1);
     obs_properties_add_int(group, SKIP_FRAMES, "Skip Frames", 0, 60, 1);
     obs_properties_add_group(props, ARUCO_GROUP, "ArUco Settings", OBS_GROUP_NORMAL, group);
 
@@ -560,6 +571,7 @@ static void filter_defaults(obs_data_t *settings)
     obs_data_set_default_int(settings, ARUCO_ID, 0);
     //obs_data_set_default_bool(settings, "draw_marker", false); This may be added in the future
     obs_data_set_default_bool(settings, SCENEITEM_VISIBILITY, true);
+    obs_data_set_default_int(settings, SCENEITEM_VISIBILITY_DELAY, 0);
     obs_data_set_default_int(settings, SKIP_FRAMES, 0);
     obs_data_set_default_double(settings, POSITION_EASING_FACTOR, DEFAULT_EASING_FACTOR);
     obs_data_set_default_double(settings, ROTATION_EASING_FACTOR, DEFAULT_EASING_FACTOR);
